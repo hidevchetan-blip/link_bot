@@ -201,6 +201,8 @@ async function checkUnreadMessages() {
   }
 }
 
+const path = require('path')
+
 async function sendLinkedInReply(reply) {
   try {
     ensureAlive()
@@ -214,6 +216,20 @@ async function sendLinkedInReply(reply) {
       await page.waitForTimeout(1000)
     }
 
+    // ✅ STEP 1: Attach the PDF first
+    const resumePath = path.resolve(__dirname, '../uploads/resume.pdf')
+
+    // Click the attachment (paperclip) button to reveal file input
+    const attachBtn = page.locator('button[data-test-attach-btn], button.msg-form__attachment-btn, label[for*="attach"]').first()
+    
+    // LinkedIn hides the actual file input — set it directly
+    const fileInput = page.locator('input[type="file"]').first()
+    await fileInput.setInputFiles(resumePath)
+    console.log('📎 PDF attached')
+
+    await page.waitForTimeout(2000) // wait for upload to register
+
+    // ✅ STEP 2: Type the text message
     const input = page.locator('.msg-form__contenteditable')
     await input.click()
 
@@ -224,13 +240,13 @@ async function sendLinkedInReply(reply) {
 
     await page.waitForTimeout(Math.random() * 1000 + 500)
 
-    // ✅ Exact Send button — type="submit", not the toggle
+    // ✅ STEP 3: Click Send
     const sendBtn = page.locator('button.msg-form__send-button[type="submit"]')
     await sendBtn.waitFor({ timeout: 5000 })
     await sendBtn.click()
 
     await page.waitForTimeout(1000)
-    console.log('✅ Reply sent')
+    console.log('✅ Reply + PDF sent')
     lastThreadUrl = null
 
   } catch (err) {
