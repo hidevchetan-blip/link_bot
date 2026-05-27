@@ -6,78 +6,95 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
   polling: true,
 })
 
+// ✅ Don't crash on polling errors
+bot.on('polling_error', (err) => {
+  console.log('⚠️ Telegram polling error:', err.message)
+})
+
+bot.on('error', (err) => {
+  console.log('⚠️ Telegram error:', err.message)
+})
+
 const pendingApprovals = {}
 
 async function sendApprovalRequest(data) {
+  try {
+    const id = Date.now().toString()
+    pendingApprovals[id] = data
 
-  const id = Date.now().toString()
+    const text = `
+🔔 New LinkedIn Message
 
-  pendingApprovals[id] = data
+👤 From: ${data.sender}
 
-  const text = `
-New LinkedIn Message
-
-From: ${data.sender}
-
-Message:
+💬 Message:
 ${data.message}
 
-AI Draft:
+🤖 AI Draft:
 ${data.reply}
-  `
+    `
 
-  await bot.sendMessage(
-    process.env.TELEGRAM_CHAT_ID,
-    text,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: 'Approve',
-              callback_data: `approve_${id}`,
-            },
-            {
-              text: 'Reject',
-              callback_data: `reject_${id}`,
-            },
+    await bot.sendMessage(
+      process.env.TELEGRAM_CHAT_ID,
+      text,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '✅ Approve',
+                callback_data: `approve_${id}`,
+              },
+              {
+                text: '❌ Reject',
+                callback_data: `reject_${id}`,
+              },
+            ],
           ],
-        ],
-      },
-    }
-  )
+        },
+      }
+    )
+
+    console.log('📤 Approval request sent to Telegram')
+
+  } catch (err) {
+    console.log('sendApprovalRequest error:', err.message)
+  }
 }
 
 function listenApproval(callback) {
-
   bot.on('callback_query', async (query) => {
+    try {
+      const data = query.data
 
-    const data = query.data
+      if (data.startsWith('approve_')) {
+        const id = data.replace('approve_', '')
 
-    if (data.startsWith('approve_')) {
+        if (pendingApprovals[id]) {
+          callback(pendingApprovals[id])
 
-      const id = data.replace('approve_', '')
+          await bot.answerCallbackQuery(query.id, {
+            text: '✅ Approved',
+          })
 
-      if (pendingApprovals[id]) {
-        callback(pendingApprovals[id])
+          delete pendingApprovals[id]
+        }
+      }
 
-        await bot.answerCallbackQuery(query.id, {
-          text: 'Approved',
-        })
+      if (data.startsWith('reject_')) {
+        const id = data.replace('reject_', '')
 
         delete pendingApprovals[id]
+
+        await bot.answerCallbackQuery(query.id, {
+          text: '❌ Rejected',
+        })
+
+        console.log('🚫 Reply rejected')
       }
-    }
 
-    if (data.startsWith('reject_')) {
-
-      const id = data.replace('reject_', '')
-
-      delete pendingApprovals[id]
-
-      await bot.answerCallbackQuery(query.id, {
-        text: 'Rejected',
-      })
+    } catch (err) {
+      console.log('callback_query error:', err.message)
     }
   })
 }
